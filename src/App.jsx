@@ -126,15 +126,28 @@ const MedTracker = () => {
         if (med.timeType === "conditional" && !med.isActive) return;
         if (med.startDate && med.currentDay > med.durationDays) return;
 
-        if (med.defaultTimes.includes(timeString)) {
+      if (med.defaultTimes.includes(timeString)) {
           // Check if already taken today at this time (simple check)
           const hasTaken = med.history[todayKey]?.includes(timeString);
 
           if (!hasTaken && notificationPermission === "granted") {
-            new Notification(`Waktunya Minum Obat!`, {
-              body: `${med.name} - ${med.dosage} (${med.instruction})`,
-              icon: "/icon.png", // Fallback icon
-            });
+            // Use ServiceWorker registration to show notification
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.ready.then(registration => {
+                registration.showNotification(`Waktunya Minum Obat!`, {
+                  body: `${med.name} - ${med.dosage} (${med.instruction})`,
+                  icon: "/pwa-192x192.png", // Use PWA icon
+                  badge: "/pwa-192x192.png",
+                  vibrate: [200, 100, 200]
+                });
+              });
+            } else {
+              // Fallback for non-SW environments (e.g. localhost dev without SW)
+              new Notification(`Waktunya Minum Obat!`, {
+                body: `${med.name} - ${med.dosage} (${med.instruction})`,
+                icon: "/pwa-192x192.png",
+              });
+            }
           }
         }
       });
@@ -155,6 +168,16 @@ const MedTracker = () => {
     if ("Notification" in window) {
       const permission = await Notification.requestPermission();
       setNotificationPermission(permission);
+      if (permission === 'granted') {
+        if ('serviceWorker' in navigator) {
+           navigator.serviceWorker.ready.then(registration => {
+             registration.showNotification('Notifikasi Aktif', {
+               body: 'Anda akan menerima pengingat minum obat.',
+               icon: '/pwa-192x192.png'
+             });
+           });
+        }
+      }
     }
   };
 
