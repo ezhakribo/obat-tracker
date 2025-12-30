@@ -44,7 +44,7 @@ const MedTracker = () => {
       durationDays: 7,
       startDate: null, // User click start
       currentDay: 0,
-      defaultTimes: ["07:00", "19:00"],
+      defaultTimes: ["08:00", "20:00"],
       icon: "bottle",
       color: "bg-blue-100 text-blue-700 border-blue-200",
       history: {},
@@ -56,7 +56,7 @@ const MedTracker = () => {
       instruction: "Sesudah Makan (Max 20 hari)",
       timeType: "frequency",
       timesPerDay: 4,
-      defaultTimes: ["07:00", "12:00", "17:00", "21:00"],
+      defaultTimes: ["08:00", "12:00", "16:00", "20:00"],
       maxDuration: 20,
       currentDay: 1,
       icon: "bottle",
@@ -71,7 +71,7 @@ const MedTracker = () => {
       timeType: "conditional", // Hanya jika aktif
       isActive: false, // Default mati, user nyalakan kalau pilek
       timesPerDay: 3,
-      defaultTimes: ["07:00", "13:00", "19:00"],
+      defaultTimes: ["08:00", "14:00", "20:00"],
       icon: "bottle",
       color: "bg-yellow-100 text-yellow-700 border-yellow-200",
       history: {},
@@ -82,7 +82,7 @@ const MedTracker = () => {
       dosage: "3 Tetes",
       instruction: "Pagi - Sesudah Makan",
       timeType: "fixed",
-      defaultTimes: ["07:00"],
+      defaultTimes: ["09:00"],
       icon: "drop",
       color: "bg-purple-100 text-purple-700 border-purple-200",
       history: {},
@@ -93,7 +93,7 @@ const MedTracker = () => {
       dosage: "2.5 ml",
       instruction: "Pagi - Sesudah Makan",
       timeType: "fixed",
-      defaultTimes: ["07:30"],
+      defaultTimes: ["09:00"],
       icon: "bottle",
       color: "bg-orange-100 text-orange-700 border-orange-200",
       history: {},
@@ -102,13 +102,13 @@ const MedTracker = () => {
 
   // Load from local storage or use initial
   const [meds, setMeds] = useState(() => {
-    const saved = localStorage.getItem("myMedsData_v1");
+    const saved = localStorage.getItem("myMedsData_v2");
     return saved ? JSON.parse(saved) : initialMeds;
   });
 
   // Save to local storage whenever meds change
   useEffect(() => {
-    localStorage.setItem("myMedsData_v1", JSON.stringify(meds));
+    localStorage.setItem("myMedsData_v2", JSON.stringify(meds));
   }, [meds]);
 
   // Clock Ticker & Notification Checker
