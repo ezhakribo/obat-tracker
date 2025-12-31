@@ -199,22 +199,35 @@ const MedTracker = () => {
         if (med.id !== medId) return med;
 
         const prevHistory = med.history[todayKey] || [];
-        // Prevent double logging for same slot instantly
-        if (prevHistory.includes(scheduledTime)) return med;
+        const isAlreadyTaken = prevHistory.some(
+          (log) => log.scheduled === scheduledTime
+        );
+
+        let newHistory;
+        if (isAlreadyTaken) {
+          // REMOVE (Cancel/Undo)
+          if (!confirm("Batalkan status sudah diminum?")) return med; // Optional confirmation
+          newHistory = prevHistory.filter(
+            (log) => log.scheduled !== scheduledTime
+          );
+        } else {
+          // ADD (Take)
+          newHistory = [
+            ...prevHistory,
+            { scheduled: scheduledTime, takenAt: actualTime },
+          ];
+        }
 
         let newMedState = {
           ...med,
           history: {
             ...med.history,
-            [todayKey]: [
-              ...prevHistory,
-              { scheduled: scheduledTime, takenAt: actualTime },
-            ],
+            [todayKey]: newHistory,
           },
         };
 
-        // Logic khusus untuk tracking durasi/hari
-        if (med.id === 2 && !med.startDate) {
+        // Logic khusus untuk tracking durasi/hari (hanya saat ADD, biarkan jika cancel)
+        if (!isAlreadyTaken && med.id === 2 && !med.startDate) {
           newMedState.startDate = todayKey;
           newMedState.currentDay = 1;
         }
@@ -375,7 +388,7 @@ const MedTracker = () => {
                       return (
                         <button
                           key={idx}
-                          disabled={taken}
+                          // disabled={taken} // DISABLED REMOVED TO ALLOW TOGGLE
                           onClick={() => takeMedication(med.id, time)}
                           className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all active:scale-95 ${
                             taken
