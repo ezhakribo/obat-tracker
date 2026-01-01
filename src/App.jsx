@@ -11,6 +11,7 @@ import {
   Pill,
   Droplet,
   Thermometer,
+  RotateCcw,
 } from "lucide-react";
 
 const MedTracker = () => {
@@ -112,13 +113,31 @@ const MedTracker = () => {
   }, [meds]);
 
   // Clock Ticker & Notification Checker
+  const lastCheckRef = useRef(new Date());
+
   useEffect(() => {
-    const checkNotifications = (now) => {
-      const timeString = now.toLocaleTimeString("id-ID", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
+    const checkNotifications = () => {
+      const now = new Date();
+      const lastCheck = lastCheckRef.current;
+      
+      // Update ref immediately to prevent double firing if logic takes time
+      lastCheckRef.current = now;
+
+      // Helper to format time as HH:MM consistently
+      const formatTime = (date) => {
+        const h = date.getHours().toString().padStart(2, '0');
+        const m = date.getMinutes().toString().padStart(2, '0');
+        return `${h}:${m}`;
+      };
+
+      // Helper to parse HH:MM to today's date
+      const parseTime = (timeStr) => {
+        const [h, m] = timeStr.split(':').map(Number);
+        const date = new Date(now);
+        date.setHours(h, m, 0, 0);
+        return date;
+      };
+
       const todayKey = now.toISOString().split("T")[0];
 
       meds.forEach((med) => {
@@ -126,40 +145,59 @@ const MedTracker = () => {
         if (med.timeType === "conditional" && !med.isActive) return;
         if (med.startDate && med.currentDay > med.durationDays) return;
 
-      if (med.defaultTimes.includes(timeString)) {
-          // Check if already taken today at this time (simple check)
-          const hasTaken = med.history[todayKey]?.includes(timeString);
+        med.defaultTimes.forEach((scheduledTime) => {
+          const scheduledDate = parseTime(scheduledTime);
+          
+          // Check if scheduled time is within the window (lastCheck < scheduled <= now)
+          // Also allow a small buffer (e.g., within last 60 seconds) if strictly checking equality,
+          // but window check is better for background catch-up.
+          // We limit catch-up to 15 minutes to avoid spamming if opened after days.
+          const timeSinceScheduled = now - scheduledDate;
+          const timeSinceLastCheck = scheduledDate - lastCheck;
 
-          if (!hasTaken && notificationPermission === "granted") {
-            // Use ServiceWorker registration to show notification
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.ready.then(registration => {
-                registration.showNotification(`Waktunya Minum Obat!`, {
-                  body: `${med.name} - ${med.dosage} (${med.instruction})`,
-                  icon: "/pwa-192x192.png", // Use PWA icon
-                  badge: "/pwa-192x192.png",
-                  vibrate: [200, 100, 200]
-                });
-              });
-            } else {
-              // Fallback for non-SW environments (e.g. localhost dev without SW)
-              new Notification(`Waktunya Minum Obat!`, {
+          // Condition: 
+          // 1. Scheduled time passed recently ( > 0)
+          // 2. We haven't checked since it passed (scheduled > lastCheck)
+          // 3. Not too old (e.g. < 60 mins ago) to avoid confusion, or maybe we DO want to show missed? 
+          //    Let's stick to "missed recently" for notifications.
+          
+          const isDue = scheduledDate > lastCheck && scheduledDate <= now;
+          
+          if (isDue) {
+             // Check if already taken today
+            const hasTaken = med.history[todayKey]?.some(log => log.scheduled === scheduledTime);
+
+            if (!hasTaken && notificationPermission === "granted") {
+              const title = `Waktunya Minum Obat!`;
+              const options = {
                 body: `${med.name} - ${med.dosage} (${med.instruction})`,
                 icon: "/pwa-192x192.png",
-              });
+                badge: "/pwa-192x192.png",
+                vibrate: [200, 100, 200],
+                tag: `med-${med.id}-${scheduledTime}` // Prevent duplicate notifications
+              };
+
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                  registration.showNotification(title, options);
+                });
+              } else {
+                new Notification(title, options);
+              }
             }
           }
-        }
+        });
       });
     };
 
+    // Run check every 30 seconds to be more precise
     const timer = setInterval(() => {
-      const now = new Date();
-      setCurrentTime(now);
-      checkNotifications(now);
-    }, 60000); // Check every minute
+      setCurrentTime(new Date());
+      checkNotifications();
+    }, 30000);
 
-
+    // Initial check on mount (optional, might duplicate if re-render, but strict window check handles it)
+    // checkNotifications(); 
 
     return () => clearInterval(timer);
   }, [meds, notificationPermission]);
@@ -188,11 +226,10 @@ const MedTracker = () => {
   const takeMedication = (medId, scheduledTime) => {
     const now = new Date();
     const todayKey = now.toISOString().split("T")[0];
-    const actualTime = now.toLocaleTimeString("id-ID", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
+    // Manual format to ensure consistency with schedule keys
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const actualTime = `${hours}:${minutes}`;
 
     setMeds((prevMeds) =>
       prevMeds.map((med) => {
@@ -256,6 +293,26 @@ const MedTracker = () => {
       })
     );
   };
+  
+  const resetTodaySchedule = () => {
+    if (!confirm("Reset semua jadwal hari ini? Status 'sudah diminum' akan dihapus.")) return;
+    
+    const now = new Date();
+    const todayKey = now.toISOString().split("T")[0];
+
+    setMeds((prevMeds) => 
+      prevMeds.map((med) => {
+        // Create new history object without today's key
+        const newHistory = { ...med.history };
+        delete newHistory[todayKey];
+        
+        return {
+          ...med,
+          history: newHistory
+        };
+      })
+    );
+  };
 
   // --- RENDER HELPERS ---
 
@@ -288,14 +345,23 @@ const MedTracker = () => {
       <header className="bg-teal-600 text-white p-6 rounded-b-3xl shadow-lg sticky top-0 z-10">
         <div className="flex justify-between items-center mb-2">
           <h1 className="text-2xl font-bold">ObatKu</h1>
-          {notificationPermission !== "granted" && (
-            <button
-              onClick={requestNotification}
-              className="bg-teal-700 p-2 rounded-full hover:bg-teal-800"
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={resetTodaySchedule}
+              className="bg-teal-700 p-2 rounded-full hover:bg-teal-800 transition-colors"
+              title="Reset Jadwal Hari Ini"
             >
-              <Bell className="w-5 h-5 text-yellow-300 animate-pulse" />
+              <RotateCcw className="w-5 h-5 text-white" />
             </button>
-          )}
+            {notificationPermission !== "granted" && (
+              <button
+                onClick={requestNotification}
+                className="bg-teal-700 p-2 rounded-full hover:bg-teal-800 transition-colors"
+              >
+                <Bell className="w-5 h-5 text-yellow-300 animate-pulse" />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex items-center space-x-2 opacity-90">
           <Clock className="w-4 h-4" />
